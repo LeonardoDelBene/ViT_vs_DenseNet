@@ -49,8 +49,6 @@ class UMMDSDataset(Dataset):
         else:
             print(f"Negative directory not found: {negative_dir}")
 
-
-        #Debug: stampa il numero di immagini trovate
         print(f"[{split}] Found {len(self.image_paths)} images: {len(self.labels)} labels (Pos: {self.labels.count(1)}, Neg: {self.labels.count(0)})")
 
     def __len__(self):
@@ -176,19 +174,19 @@ if __name__ == '__main__':
     mp.set_start_method('spawn')
 
 
-    root_dir = '/tmp/Deep Learning/.venv/UMMDS'  # Cartella principale
+    root_dir = '/tmp/Deep Learning/.venv/UMMDS'
 
     transform = transforms.Compose([
-        transforms.CenterCrop(224),  # Ritaglio centrale di 224x224
-        transforms.ToTensor(), # Converte l'immagine in un tensore PyTorch
+        transforms.CenterCrop(224),
+        transforms.ToTensor(),
         transforms.Normalize(mean=[0.7514, 0.5555, 0.6208], std=[0.0395, 0.1003, 0.0496])
     ])
 
-    # Creazione del dataset
+
     train_dataset = UMMDSDataset(root_dir, 'train', transform=transform)
     test_dataset = UMMDSDataset(root_dir, 'test', transform=transform)
 
-    # Creazione del DataLoader
+
     train_loader = DataLoader(train_dataset, batch_size=64, shuffle=True, num_workers=4)
     test_loader = DataLoader(test_dataset, batch_size=64, shuffle=False, num_workers=4)
 
@@ -198,7 +196,7 @@ if __name__ == '__main__':
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model = DenseNet(num_block, num_classes, growth_rate).to(device)
 
-    # Print model summary (using the correct device)
+    # Print model summary
     summary(model, (3, 224, 224))
 
     # Define the optimizer and loss function
@@ -206,10 +204,8 @@ if __name__ == '__main__':
     #optimizer = Adam(model.parameters(), lr=1e-3)
     criterion = nn.CrossEntropyLoss()
 
-    # Training loop (simplified)
     num_epochs = 100
 
-    # Percorso del checkpoint
     checkpoint_path = "checkpoint.pth"
 
     # Se esiste un checkpoint, caricalo
@@ -262,7 +258,7 @@ if __name__ == '__main__':
         torch.save(checkpoint, checkpoint_path)
         print(f"Checkpoint salvato all'epoca {epoch + 1}")
 
-    # Final test evaluation
+    # Test
     model.eval()
     running_loss = 0.0
     correct = 0

@@ -50,8 +50,6 @@ class UMMDSDataset(Dataset):
         else:
             print(f"Negative directory not found: {negative_dir}")
 
-
-        #Debug: stampa il numero di immagini trovate
         print(f"[{split}] Found {len(self.image_paths)} images: {len(self.labels)} labels (Pos: {self.labels.count(1)}, Neg: {self.labels.count(0)})")
 
     def __len__(self):
@@ -128,9 +126,9 @@ class MLP(nn.Module):
         self.fc2 = nn.Linear(hidden_features, out_features)
 
     def forward(self, x):
-        x = self.fc1(x) # (n_samples, n_patches + 1, hidden_features)
-        x = self.act(x)  # (n_samples, n_patches + 1, hidden_features)
-        x = self.fc2(x)  # (n_samples, n_patches + 1, out_features)
+        x = self.fc1(x)
+        x = self.act(x)
+        x = self.fc2(x)
 
         return x
 
@@ -192,10 +190,8 @@ class VisionTransformer(nn.Module):
 if __name__ == '__main__':
     import torch.multiprocessing as mp
 
-    mp.set_start_method('spawn')  # Fix per evitare un errore di multiprocessing
+    mp.set_start_method('spawn')
 
-
-    # Impostazioni di base
     batch_size = 64
     num_epochs = 100
     learning_rate = 1e-4
@@ -206,7 +202,7 @@ if __name__ == '__main__':
     depth = 12
     n_heads = 12
 
-    root_dir = '/tmp/Deep Learning/.venv/UMMDS'  # Cartella principale
+    root_dir = '/tmp/Deep Learning/.venv/UMMDS'
 
     transform = transforms.Compose([
         transforms.CenterCrop(224),
@@ -214,18 +210,17 @@ if __name__ == '__main__':
         transforms.Normalize(mean=[0.7514, 0.5555, 0.6208], std=[0.0395, 0.1003, 0.0496])
     ])
 
-    # Creazione del dataset
+
     train_dataset = UMMDSDataset(root_dir, 'train', transform=transform)
     test_dataset = UMMDSDataset(root_dir, 'test', transform=transform)
 
-    # Creazione del DataLoader
+
     train_loader = DataLoader(train_dataset, batch_size=64, shuffle=True, num_workers=4)
     test_loader = DataLoader(test_dataset, batch_size=64, shuffle=False, num_workers=4)
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(device)
 
-    # Creare il modello Vision Transformer
     model = VisionTransformer(img_size=img_size, patch_size=patch_size, in_chans=3, n_classes=n_classes, embed_dim=embed_dim, depth=depth, n_heads=n_heads)
     model.to(device)
     summary(model, (3, 224, 224))
@@ -236,10 +231,9 @@ if __name__ == '__main__':
 
     best_accuracy = 0.0
     num_epochs = 100
-    # Percorso del checkpoint
+
     checkpoint_path = "checkpoint_vit.pth"
 
-    # Se esiste un checkpoint, caricalo
     start_epoch = 0
     resume_training = False  # Cambia in True se vuoi riprendere
     rt = False
@@ -269,7 +263,6 @@ if __name__ == '__main__':
             loss.backward()
             optimizer.step()
 
-            # Statistiche
             running_loss += loss.item()
             _, predicted = outputs.max(1)
             total += labels.size(0)
@@ -293,7 +286,7 @@ if __name__ == '__main__':
 
     print("Training finished.")
     print("Start testing.")
-    # Test finale dopo il training
+    # Test
     model.eval()
     running_loss = 0.0
     correct = 0
@@ -328,11 +321,9 @@ if __name__ == '__main__':
     total_time = start_event.elapsed_time(end_event) / 1000  # Tempo totale in secondi
     fps = total / total_time  # Numero di immagini elaborate al secondo
 
-    # Calcolo della loss e dell'accuracy
     test_loss = running_loss / len(test_loader)
     test_accuracy = 100 * correct / total
 
-    # Calcolo dello score F1
     f1 = f1_score(all_labels, all_predictions, average='weighted')  # Weighted: tiene conto della classe bilanciata
     precision = precision_score(all_labels, all_predictions, average='weighted')
     recall = recall_score(all_labels, all_predictions, average='weighted')
