@@ -294,11 +294,6 @@ if __name__ == '__main__':
     all_labels = []  # Per memorizzare tutte le etichette reali
     all_predictions = []  # Per memorizzare tutte le previsioni del modello
 
-    start_event = torch.cuda.Event(enable_timing=True)
-    end_event = torch.cuda.Event(enable_timing=True)
-
-    start_event.record()  # Inizia la misurazione del tempo
-
     with torch.no_grad():
         for inputs, labels in test_loader:
             inputs, labels = inputs.to(device), labels.to(device)
@@ -313,13 +308,6 @@ if __name__ == '__main__':
             all_labels.extend(labels.cpu().numpy())
             all_predictions.extend(predicted.cpu().numpy())
 
-    end_event.record()  # Fine misurazione del tempo
-
-    torch.cuda.synchronize()  # Assicura che tutti gli eventi siano completati
-
-    total_time = start_event.elapsed_time(end_event) / 1000  # Tempo totale in secondi
-    fps = total / total_time  # Numero di immagini elaborate al secondo
-
     test_loss = running_loss / len(test_loader)
     test_accuracy = 100 * correct / total
 
@@ -329,7 +317,6 @@ if __name__ == '__main__':
 
     print(f"Test Results: Test Loss: {test_loss:.4f}, Test Accuracy: {test_accuracy:.2f}%")
     print(f"F1 Score: {f1:.4f}, Precision: {precision:.4f}, Recall: {recall:.4f}")
-    print(f"FPS (Frames Per Second): {fps:.2f}")
 
 
 
