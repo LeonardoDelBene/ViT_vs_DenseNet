@@ -235,10 +235,9 @@ if __name__ == '__main__':
     checkpoint_path = "checkpoint_vit.pth"
 
     start_epoch = 0
-    resume_training = False  # Cambia in True se vuoi riprendere
-    rt = False
+    resume = True
 
-    if rt  and os.path.exists(checkpoint_path):
+    if resume  and os.path.exists(checkpoint_path):
         checkpoint = torch.load(checkpoint_path)
         model.load_state_dict(checkpoint['model_state_dict'])
         optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
