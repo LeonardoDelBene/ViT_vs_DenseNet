@@ -1,21 +1,14 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from torch.utils.data import DataLoader
-import torchvision
+from torch.utils.data import DataLoader, Dataset
 import torchvision.transforms as transforms
-from torch.optim import AdamW
-from torch.optim import Adam
+from torch.optim import AdamW, Adam
 from torchsummary import summary
 from torchvision import datasets
 import os
 from PIL import Image
-from torch.utils.data import Dataset
-from  sklearn.metrics import f1_score, precision_score, recall_score
-
-
-
-
+from sklearn.metrics import f1_score, precision_score, recall_score
 
 
 class UMMDSDataset(Dataset):

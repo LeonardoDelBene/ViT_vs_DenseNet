@@ -1,22 +1,14 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from torch.utils.data import DataLoader
-import torchvision
+from torch.utils.data import DataLoader, Dataset
 import torchvision.transforms as transforms
-from torch.optim import Adam
-from torch.optim import AdamW
-from torchview import draw_graph
+from torch.optim import AdamW, Adam
 from torchsummary import summary
-import torchvision.datasets
-from torch.utils.data import DataLoader
 from torchvision import datasets
 import os
-import json
 from PIL import Image
-import torch
-from torch.utils.data import Dataset
-from  sklearn.metrics import f1_score, precision_score, recall_score
+from sklearn.metrics import f1_score, precision_score, recall_score
 
 
 class UMMDSDataset(Dataset):
@@ -56,14 +48,11 @@ class UMMDSDataset(Dataset):
         return len(self.image_paths)
 
     def __getitem__(self, idx):
-        # Ottieni percorso immagine e label
         img_path = self.image_paths[idx]
         label = self.labels[idx]
 
-        # Carica l'immagine
         image = Image.open(img_path).convert("RGB")
 
-        # Applica le trasformazioni, se definite
         if self.transform:
             image = self.transform(image)
 
@@ -291,8 +280,8 @@ if __name__ == '__main__':
     correct = 0
     total = 0
 
-    all_labels = []  # Per memorizzare tutte le etichette reali
-    all_predictions = []  # Per memorizzare tutte le previsioni del modello
+    all_labels = []
+    all_predictions = []
 
     with torch.no_grad():
         for inputs, labels in test_loader:
@@ -311,7 +300,7 @@ if __name__ == '__main__':
     test_loss = running_loss / len(test_loader)
     test_accuracy = 100 * correct / total
 
-    f1 = f1_score(all_labels, all_predictions, average='weighted')  # Weighted: tiene conto della classe bilanciata
+    f1 = f1_score(all_labels, all_predictions, average='weighted')
     precision = precision_score(all_labels, all_predictions, average='weighted')
     recall = recall_score(all_labels, all_predictions, average='weighted')
 
