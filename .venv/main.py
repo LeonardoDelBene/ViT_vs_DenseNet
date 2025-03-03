@@ -170,7 +170,7 @@ if __name__ == '__main__':
     root_dir = '/tmp/Deep Learning/.venv/UMMDS'
 
     transform = transforms.Compose([
-        transforms.CenterCrop(224),
+        transforms.RandomCrop(224),
         transforms.ToTensor(),
         transforms.Normalize(mean=[0.7514, 0.5555, 0.6208], std=[0.0395, 0.1003, 0.0496])
     ])
@@ -183,7 +183,7 @@ if __name__ == '__main__':
     train_loader = DataLoader(train_dataset, batch_size=64, shuffle=True, num_workers=4)
     test_loader = DataLoader(test_dataset, batch_size=64, shuffle=False, num_workers=4)
 
-    num_block = [6, 12, 24, 16]
+    num_block = [3, 6, 12, 8]
     growth_rate = 32
     num_classes = 2
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")

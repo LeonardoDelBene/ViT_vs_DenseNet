@@ -187,14 +187,14 @@ if __name__ == '__main__':
     img_size = 224
     patch_size = 16
     n_classes = 2
-    embed_dim = 768
-    depth = 12
+    embed_dim = 192
+    depth = 6
     n_heads = 12
 
     root_dir = '/tmp/Deep Learning/.venv/UMMDS'
 
     transform = transforms.Compose([
-        transforms.CenterCrop(224),
+        transforms.RandomCrop(224),
         transforms.ToTensor(),
         transforms.Normalize(mean=[0.7514, 0.5555, 0.6208], std=[0.0395, 0.1003, 0.0496])
     ])
@@ -224,7 +224,7 @@ if __name__ == '__main__':
     checkpoint_path = "checkpoint_vit.pth"
 
     start_epoch = 0
-    resume = True
+    resume = False
 
     if resume  and os.path.exists(checkpoint_path):
         checkpoint = torch.load(checkpoint_path)
