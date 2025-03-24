@@ -6,16 +6,18 @@ import torchvision.transforms as transforms
 from torch.optim import AdamW, Adam
 from torchsummary import summary
 from torchvision import datasets
+from torch.utils.data import random_split, DataLoader
 import os
 from PIL import Image
 from sklearn.metrics import f1_score, precision_score, recall_score
 
 
 class UMMDSDataset(Dataset):
-    def __init__(self, root_dir, split, transform=None):
+    def __init__(self, root_dir, split, num_augmentations, transform=None):
         self.root_dir = root_dir
         self.split = split
         self.transform = transform
+        self.num_augmentations = num_augmentations
 
         self.image_paths = []
         self.labels = []
@@ -30,8 +32,6 @@ class UMMDSDataset(Dataset):
                 if os.path.isfile(img_path):
                     self.image_paths.append(img_path)
                     self.labels.append(1)
-        else:
-            print(f"Positive directory not found: {positive_dir}")
 
         if os.path.isdir(negative_dir):
             for img_file in os.listdir(negative_dir):
@@ -39,24 +39,22 @@ class UMMDSDataset(Dataset):
                 if os.path.isfile(img_path):
                     self.image_paths.append(img_path)
                     self.labels.append(0)
-        else:
-            print(f"Negative directory not found: {negative_dir}")
-
-        print(f"[{split}] Found {len(self.image_paths)} images: {len(self.labels)} labels (Pos: {self.labels.count(1)}, Neg: {self.labels.count(0)})")
 
     def __len__(self):
-        return len(self.image_paths)
+        return len(self.image_paths) * self.num_augmentations  # Ogni immagine viene usata 5 volte
 
     def __getitem__(self, idx):
-        img_path = self.image_paths[idx]
-        label = self.labels[idx]
+        img_idx = idx // self.num_augmentations  # Ripete ogni immagine 5 volte
+        img_path = self.image_paths[img_idx]
+        label = self.labels[img_idx]
 
         image = Image.open(img_path).convert("RGB")
 
         if self.transform:
-            image = self.transform(image)
+            image = self.transform(image)  # Ogni volta che viene chiamato, il crop è casuale
 
         return image, label
+
 
 class PatchEmbed(nn.Module):
     def __init__(self, img_size, patch_size, in_chans=3, embed_dim=768):
@@ -181,17 +179,18 @@ if __name__ == '__main__':
 
     mp.set_start_method('spawn')
 
-    batch_size = 64
-    num_epochs = 100
+    batch_size = 256
+    num_epochs = 50
     learning_rate = 1e-4
+    weight_decay = 0.1
     img_size = 224
     patch_size = 16
     n_classes = 2
-    embed_dim = 192
-    depth = 6
-    n_heads = 12
+    embed_dim = 96
+    depth = 8
+    n_heads = 6
 
-    root_dir = '/tmp/Deep Learning/.venv/UMMDS'
+    root_dir = '/tmp/Deep_Learning/.venv/UMMDS'
 
     transform = transforms.Compose([
         transforms.RandomCrop(224),
@@ -199,36 +198,51 @@ if __name__ == '__main__':
         transforms.Normalize(mean=[0.7514, 0.5555, 0.6208], std=[0.0395, 0.1003, 0.0496])
     ])
 
+    num_argumentations = 5
+    full_train_dataset = UMMDSDataset(root_dir, 'train', num_argumentations, transform=transform)
 
-    train_dataset = UMMDSDataset(root_dir, 'train', transform=transform)
-    test_dataset = UMMDSDataset(root_dir, 'test', transform=transform)
+    # Definiamo la dimensione del train e validation set
+    dataset_length = len(full_train_dataset)
 
+    # Compute sizes
+    train_size = int(0.8 * dataset_length)
+    val_size = int(0.1 * dataset_length)
+    test_size = dataset_length - train_size - val_size  # Ensure the sum is correct
 
-    train_loader = DataLoader(train_dataset, batch_size=64, shuffle=True, num_workers=4)
-    test_loader = DataLoader(test_dataset, batch_size=64, shuffle=False, num_workers=4)
+    print(f"Train size: {train_size}, Validation size: {val_size}, Test size: {test_size}")
+
+    # Perform the split
+    train_dataset, val_dataset, test_dataset_new = random_split(full_train_dataset, [train_size, val_size, test_size])
+    num_argumentations = 1
+    test_dataset = UMMDSDataset(root_dir, 'test', num_argumentations, transform=transform)
+
+    # Creazione dei DataLoader
+    train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, num_workers=4)
+    val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False, num_workers=4)
+    test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False, num_workers=4)
+    test_loader_new = DataLoader(test_dataset_new, batch_size=batch_size, shuffle=False, num_workers=4)
+    
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    print(device)
+
 
     model = VisionTransformer(img_size=img_size, patch_size=patch_size, in_chans=3, n_classes=n_classes, embed_dim=embed_dim, depth=depth, n_heads=n_heads)
     model.to(device)
     summary(model, (3, 224, 224))
 
     #optimizer = Adam(model.parameters(), lr=learning_rate)
-    optimizer = AdamW(model.parameters(), lr=learning_rate, weight_decay=0.1)
+    optimizer = AdamW(model.parameters(), lr=learning_rate, weight_decay=weight_decay)
     criterion = torch.nn.CrossEntropyLoss()
-
-    best_accuracy = 0.0
-    num_epochs = 100
 
     checkpoint_path = "checkpoint_vit.pth"
 
     start_epoch = 0
-    resume = False
+    resume = True
 
     if resume  and os.path.exists(checkpoint_path):
         checkpoint = torch.load(checkpoint_path)
         model.load_state_dict(checkpoint['model_state_dict'])
+        model.to(device)
         optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
         start_epoch = checkpoint['epoch'] + 1
         print(f"Checkpoint loaded. Resuming from epoch {start_epoch}")
@@ -258,8 +272,7 @@ if __name__ == '__main__':
 
         train_loss = running_loss / len(train_loader)
         train_accuracy = 100 * correct / total
-        print(
-            f'Epoch {epoch + 1}/{num_epochs}, Loss: {train_loss:.4f}, Accuracy: {train_accuracy:.2f}%')
+
 
         # Salva il checkpoint
         checkpoint = {
@@ -270,45 +283,102 @@ if __name__ == '__main__':
             'train_accuracy': train_accuracy,
         }
         torch.save(checkpoint, checkpoint_path)
-        print(f"Checkpoint salvato all'epoca {epoch + 1}")
 
-    print("Training finished.")
-    print("Start testing.")
-    # Test
+        # Validation ogni 5 epoche
+        if (epoch + 1) % 1 == 0:
+            model.eval()
+            running_loss_val = 0.0
+            correct_val = 0
+            total_val = 0
+
+            all_labels_val = []
+            all_predictions_val = []
+
+            with torch.no_grad():
+                for inputs_val, labels_val in val_loader:
+                    inputs_val, labels_val = inputs_val.to(device), labels_val.to(device)
+                    outputs_val = model(inputs_val)
+                    loss_val = criterion(outputs_val, labels_val)
+
+                    running_loss_val += loss_val.item()
+                    _, predicted_val = torch.max(outputs_val, 1)
+                    total_val += labels_val.size(0)
+                    correct_val += (predicted_val == labels_val).sum().item()
+
+                    all_labels_val.extend(labels_val.cpu().numpy())
+                    all_predictions_val.extend(predicted_val.cpu().numpy())
+
+            val_loss = running_loss_val / len(val_loader)
+            val_accuracy = 100 * correct_val / total_val
+
+            print(f'Epoch {epoch + 1}/{num_epochs}, Train Loss: {train_loss:.4f}, Train Accuracy: {train_accuracy:.2f}%, Val Loss: {val_loss:.4f}, Val Accuracy: {val_accuracy:.2f}%')
+
+
+    print("Training completed")
+
     model.eval()
-    running_loss = 0.0
-    correct = 0
-    total = 0
+    running_loss_test = 0.0
+    correct_test = 0
+    total_test = 0
 
-    all_labels = []
-    all_predictions = []
+    all_labels_test = []
+    all_predictions_test = []
 
     with torch.no_grad():
-        for inputs, labels in test_loader:
-            inputs, labels = inputs.to(device), labels.to(device)
-            outputs = model(inputs)
-            loss = criterion(outputs, labels)
+        for inputs_test, labels_test in test_loader:
+            inputs_test, labels_test = inputs_test.to(device), labels_test.to(device)
+            outputs_test = model(inputs_test)
+            loss_test = criterion(outputs_test, labels_test)
 
-            running_loss += loss.item()
-            _, predicted = torch.max(outputs, 1)
-            total += labels.size(0)
-            correct += (predicted == labels).sum().item()
+            running_loss_test += loss_test.item()
+            _, predicted_test = torch.max(outputs_test, 1)
+            total_test += labels_test.size(0)
+            correct_test += (predicted_test == labels_test).sum().item()
 
-            all_labels.extend(labels.cpu().numpy())
-            all_predictions.extend(predicted.cpu().numpy())
+            all_labels_test.extend(labels_test.cpu().numpy())
+            all_predictions_test.extend(predicted_test.cpu().numpy())
 
-    test_loss = running_loss / len(test_loader)
-    test_accuracy = 100 * correct / total
+    test_loss = running_loss_test / len(test_loader)
+    test_accuracy = 100 * correct_test / total_test
 
-    f1 = f1_score(all_labels, all_predictions, average='weighted')
-    precision = precision_score(all_labels, all_predictions, average='weighted')
-    recall = recall_score(all_labels, all_predictions, average='weighted')
+    f1 = f1_score(all_labels_test, all_predictions_test, average='weighted')
+    precision = precision_score(all_labels_test, all_predictions_test, average='weighted')
+    recall = recall_score(all_labels_test, all_predictions_test, average='weighted')
 
-    print(f"Test Results: Test Loss: {test_loss:.4f}, Test Accuracy: {test_accuracy:.2f}%")
+    print("\nTest Results after training ")
+    print(f"Test Loss: {test_loss:.4f}, Test Accuracy: {test_accuracy:.2f}%")
     print(f"F1 Score: {f1:.4f}, Precision: {precision:.4f}, Recall: {recall:.4f}")
 
+    model.eval()
+    running_loss_test = 0.0
+    correct_test = 0
+    total_test = 0
 
+    all_labels_test = []
+    all_predictions_test = []
 
+    with torch.no_grad():
+        for inputs_test, labels_test in test_loader_new:
+            inputs_test, labels_test = inputs_test.to(device), labels_test.to(device)
+            outputs_test = model(inputs_test)
+            loss_test = criterion(outputs_test, labels_test)
 
+            running_loss_test += loss_test.item()
+            _, predicted_test = torch.max(outputs_test, 1)
+            total_test += labels_test.size(0)
+            correct_test += (predicted_test == labels_test).sum().item()
 
+            all_labels_test.extend(labels_test.cpu().numpy())
+            all_predictions_test.extend(predicted_test.cpu().numpy())
+
+    test_loss = running_loss_test / len(test_loader)
+    test_accuracy = 100 * correct_test / total_test
+
+    f1 = f1_score(all_labels_test, all_predictions_test, average='weighted')
+    precision = precision_score(all_labels_test, all_predictions_test, average='weighted')
+    recall = recall_score(all_labels_test, all_predictions_test, average='weighted')
+
+    print("\nTest Results NEW after training")
+    print(f"Test Loss: {test_loss:.4f}, Test Accuracy: {test_accuracy:.2f}%")
+    print(f"F1 Score: {f1:.4f}, Precision: {precision:.4f}, Recall: {recall:.4f}")
 

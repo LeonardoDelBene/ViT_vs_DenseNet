@@ -5,7 +5,7 @@
       <paths name="pc24leodel@papavero.dinfo.unifi.it:22 password">
         <serverdata>
           <mappings>
-            <mapping deploy="/tmp/Deep Learning" local="$PROJECT_DIR$" />
+            <mapping deploy="/tmp/Deep_Learning" local="$PROJECT_DIR$" />
           </mappings>
         </serverdata>
       </paths>
