@@ -10,50 +10,9 @@ from torch.utils.data import random_split, DataLoader
 import os
 from PIL import Image
 from sklearn.metrics import f1_score, precision_score, recall_score
+from main.py import UMMDSDataset
 
 
-class UMMDSDataset(Dataset):
-    def __init__(self, root_dir, split, num_augmentations, transform=None):
-        self.root_dir = root_dir
-        self.split = split
-        self.transform = transform
-        self.num_augmentations = num_augmentations
-
-        self.image_paths = []
-        self.labels = []
-
-        split_dir = os.path.join(root_dir, split)
-        positive_dir = os.path.join(split_dir, "GP")
-        negative_dir = os.path.join(split_dir, "GN")
-
-        if os.path.isdir(positive_dir):
-            for img_file in os.listdir(positive_dir):
-                img_path = os.path.join(positive_dir, img_file)
-                if os.path.isfile(img_path):
-                    self.image_paths.append(img_path)
-                    self.labels.append(1)
-
-        if os.path.isdir(negative_dir):
-            for img_file in os.listdir(negative_dir):
-                img_path = os.path.join(negative_dir, img_file)
-                if os.path.isfile(img_path):
-                    self.image_paths.append(img_path)
-                    self.labels.append(0)
-
-    def __len__(self):
-        return len(self.image_paths) * self.num_augmentations  # Ogni immagine viene usata 5 volte
-
-    def __getitem__(self, idx):
-        img_idx = idx // self.num_augmentations  # Ripete ogni immagine 5 volte
-        img_path = self.image_paths[img_idx]
-        label = self.labels[img_idx]
-
-        image = Image.open(img_path).convert("RGB")
-
-        if self.transform:
-            image = self.transform(image)  # Ogni volta che viene chiamato, il crop è casuale
-
-        return image, label
 
 
 class PatchEmbed(nn.Module):
@@ -179,14 +138,14 @@ if __name__ == '__main__':
 
     mp.set_start_method('spawn')
 
-    batch_size = 256
+    batch_size = 128
     num_epochs = 50
     learning_rate = 1e-4
     weight_decay = 0.1
     img_size = 224
     patch_size = 16
     n_classes = 2
-    embed_dim = 96
+    embed_dim = 96+96+96
     depth = 8
     n_heads = 6
 
@@ -198,11 +157,11 @@ if __name__ == '__main__':
         transforms.Normalize(mean=[0.7514, 0.5555, 0.6208], std=[0.0395, 0.1003, 0.0496])
     ])
 
-    num_argumentations = 5
-    full_train_dataset = UMMDSDataset(root_dir, 'train', num_argumentations, transform=transform)
+    num_argumentations = 1
+    dataset = UMMDSDataset(root_dir, num_argumentations, transform=transform)
 
     # Definiamo la dimensione del train e validation set
-    dataset_length = len(full_train_dataset)
+    dataset_length = len(dataset)
 
     # Compute sizes
     train_size = int(0.8 * dataset_length)
@@ -212,15 +171,14 @@ if __name__ == '__main__':
     print(f"Train size: {train_size}, Validation size: {val_size}, Test size: {test_size}")
 
     # Perform the split
-    train_dataset, val_dataset, test_dataset_new = random_split(full_train_dataset, [train_size, val_size, test_size])
-    num_argumentations = 1
-    test_dataset = UMMDSDataset(root_dir, 'test', num_argumentations, transform=transform)
+    train_dataset, val_dataset, test_dataset = random_split(full_train_dataset, [train_size, val_size, test_size])
+
+
 
     # Creazione dei DataLoader
     train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, num_workers=4)
     val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False, num_workers=4)
     test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False, num_workers=4)
-    test_loader_new = DataLoader(test_dataset_new, batch_size=batch_size, shuffle=False, num_workers=4)
     
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -230,7 +188,6 @@ if __name__ == '__main__':
     model.to(device)
     summary(model, (3, 224, 224))
 
-    #optimizer = Adam(model.parameters(), lr=learning_rate)
     optimizer = AdamW(model.parameters(), lr=learning_rate, weight_decay=weight_decay)
     criterion = torch.nn.CrossEntropyLoss()
 
@@ -345,40 +302,8 @@ if __name__ == '__main__':
     precision = precision_score(all_labels_test, all_predictions_test, average='weighted')
     recall = recall_score(all_labels_test, all_predictions_test, average='weighted')
 
-    print("\nTest Results after training ")
+    print("\nTest Results after training")
     print(f"Test Loss: {test_loss:.4f}, Test Accuracy: {test_accuracy:.2f}%")
     print(f"F1 Score: {f1:.4f}, Precision: {precision:.4f}, Recall: {recall:.4f}")
 
-    model.eval()
-    running_loss_test = 0.0
-    correct_test = 0
-    total_test = 0
-
-    all_labels_test = []
-    all_predictions_test = []
-
-    with torch.no_grad():
-        for inputs_test, labels_test in test_loader_new:
-            inputs_test, labels_test = inputs_test.to(device), labels_test.to(device)
-            outputs_test = model(inputs_test)
-            loss_test = criterion(outputs_test, labels_test)
-
-            running_loss_test += loss_test.item()
-            _, predicted_test = torch.max(outputs_test, 1)
-            total_test += labels_test.size(0)
-            correct_test += (predicted_test == labels_test).sum().item()
-
-            all_labels_test.extend(labels_test.cpu().numpy())
-            all_predictions_test.extend(predicted_test.cpu().numpy())
-
-    test_loss = running_loss_test / len(test_loader)
-    test_accuracy = 100 * correct_test / total_test
-
-    f1 = f1_score(all_labels_test, all_predictions_test, average='weighted')
-    precision = precision_score(all_labels_test, all_predictions_test, average='weighted')
-    recall = recall_score(all_labels_test, all_predictions_test, average='weighted')
-
-    print("\nTest Results NEW after training")
-    print(f"Test Loss: {test_loss:.4f}, Test Accuracy: {test_accuracy:.2f}%")
-    print(f"F1 Score: {f1:.4f}, Precision: {precision:.4f}, Recall: {recall:.4f}")
 
